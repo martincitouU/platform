@@ -20,6 +20,6 @@ Esto permite a solo 2 usuarios conectarse y poder autenticarse sólo con llaves 
 
 Dentro de la VM también se configura ufw, un firewall a nivel de máquina. primero se comprueba que esté desactivado con 'sudo ufw status verbose', luego permitir la entrada y salida de tráfico por defecto con 'sudo ufw default deny incoming y sudo ufw default allow outgoing' y sumado a eso se agrega de manera explícita a ssh para entrada con 'sudo ufw allow OpenSSH'.
 
-Finalmente se confirma que todo esté correcto con 'sudo ufw show added' y luego se activa con 'sudo ufw enable'.
+Finalmente se confirma que todo esté correcto con 'sudo ufw show added' y luego se activa con 'sudo ufw enable'. Esta combinación de técnicas permite tener diferentes capas de seguridad a nivel tanto de cuenta AWS como de máquina.
 
-Esta combinación de técnicas permite tener diferentes capas de seguridad a nivel tanto de cuenta AWS como de máquina.
+El servicio "unattended-upgrades" permite al sistema aplicar parches de seguridad automáticamente cada día, normalmente vulnerabilidades publicadas por oficiales.
