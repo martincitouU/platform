@@ -13,7 +13,7 @@ func TestCompute(t *testing.T) {
 	deployments := []Deployment{
 		// lead times exitosos de "api": 1h, 2h, 4h  → mediana 2h
 		{ID: 1, Service: "api", CommitAt: base, DeployedAt: base.Add(1 * time.Hour), Success: true},
-		{ID: 2, Service: "api", CommitAt: base, DeployedAt: base.Add(3 * time.Hour), Success: true},
+		{ID: 2, Service: "api", CommitAt: base, DeployedAt: base.Add(2 * time.Hour), Success: true},
 		{ID: 3, Service: "api", CommitAt: base, DeployedAt: base.Add(4 * time.Hour), Success: true},
 		{ID: 4, Service: "api", CommitAt: base, DeployedAt: base.Add(1 * time.Hour), Success: false},
 		{ID: 5, Service: "web", CommitAt: base, DeployedAt: base.Add(30 * time.Minute), Success: true},
