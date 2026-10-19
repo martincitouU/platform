@@ -1,1 +1,0 @@
-El presente proyecto busca diseñar, implementar y desplegar un servicio web completo alojado en un proveedor de cloud. El foco no es en el desarrollo del software en sí, sino en la infraestructura y entrega continua.

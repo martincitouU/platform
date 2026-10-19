@@ -1,0 +1,53 @@
+name: dora
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: dora
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dora -d dora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    # Sin "ports": solo es accesible dentro de la red de Compose
+
+  api:
+    build:
+      context: ./app
+      args:
+        CMD: api
+    image: dora-api:local
+    environment:
+      DATABASE_URL: postgres://dora:${POSTGRES_PASSWORD}@db:5432/dora?sslmode=disable
+      API_TOKEN: ${API_TOKEN:?falta API_TOKEN en .env}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./app
+      args:
+        CMD: worker
+    image: dora-worker:local
+    environment:
+      DATABASE_URL: postgres://dora:${POSTGRES_PASSWORD}@db:5432/dora?sslmode=disable
+      WORKER_INTERVAL: 30s
+    ports:
+      - "127.0.0.1:9091:9091"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
