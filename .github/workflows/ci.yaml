@@ -27,3 +27,36 @@ jobs:
 
       - name: go test
         run: go test ./...
+
+  build:
+    name: Build ${{ matrix.component }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [api, worker]
+    steps:
+      - name: Clonar el repo
+        uses: actions/checkout@v4
+
+      - name: Preparar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          build-args: CMD=${{ matrix.component }}
+          tags: dora-${{ matrix.component }}:${{ github.sha }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+  
+      - name: Escanear vulnerabilidades
+        uses: aquasecurity/trivy-action@<57a97c7e7821a5776cebc9bb87c984fa69cba8f1>  # v0.35.0
+        with:
+          image-ref: dora-${{ matrix.component }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
