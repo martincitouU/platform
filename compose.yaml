@@ -15,30 +15,19 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
-    # Sin "ports": solo es accesible dentro de la red de Compose
-
   api:
-    build:
-      context: ./app
-      args:
-        CMD: api
-    image: dora-api:local
+    image: ghcr.io/martincitouu/dora-api:${IMAGE_TAG:?falta IMAGE_TAG en .env}
     environment:
       DATABASE_URL: postgres://dora:${POSTGRES_PASSWORD}@db:5432/dora?sslmode=disable
       API_TOKEN: ${API_TOKEN:?falta API_TOKEN en .env}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-
   worker:
-    build:
-      context: ./app
-      args:
-        CMD: worker
-    image: dora-worker:local
+    image: ghcr.io/martincitouu/dora-worker:${IMAGE_TAG:?falta IMAGE_TAG en .env}
     environment:
       DATABASE_URL: postgres://dora:${POSTGRES_PASSWORD}@db:5432/dora?sslmode=disable
       WORKER_INTERVAL: 30s

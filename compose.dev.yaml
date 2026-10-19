@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: ./app
+      args:
+        CMD: api
+  worker:
+    build:
+      context: ./app
+      args:
+        CMD: worker
