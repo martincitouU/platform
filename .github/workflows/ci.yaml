@@ -120,7 +120,7 @@ jobs:
       - name: Verificar que la API quedó lista
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS localhost:8080/ready; then
+            if curl -fsS localhost:8080/inexistente; then
               echo; echo "API lista"; exit 0
             fi
             sleep 2
