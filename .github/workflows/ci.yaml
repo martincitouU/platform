@@ -31,7 +31,7 @@ jobs:
       - name: go test
         run: go test ./...
 
-  build:
+  build:  
     name: Build ${{ matrix.component }}
     needs: test
     runs-on: ubuntu-latest
@@ -83,3 +83,69 @@ jobs:
           docker push "$IMAGE"
 
           echo "Publicada: $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+  
+  deploy:
+    name: Deploy a producción
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, prod]
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      DEPLOY_DIR: /opt/dora
+    steps:
+      - name: Clonar el repo
+        uses: actions/checkout@v4
+
+      - name: Guardar la versión actual (para rollback)
+        run: |
+          PREV_TAG=$(grep '^IMAGE_TAG=' "$DEPLOY_DIR/.env" | cut -d= -f2)
+          echo "PREV_TAG=$PREV_TAG" >> "$GITHUB_ENV"
+          echo "Versión actual: $PREV_TAG"
+
+      - name: Actualizar compose.yaml e IMAGE_TAG
+        run: |
+          cp compose.yaml "$DEPLOY_DIR/compose.yaml"
+          sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${GITHUB_SHA}/" "$DEPLOY_DIR/.env"
+
+      - name: Descargar imágenes nuevas
+        run: docker compose --project-directory "$DEPLOY_DIR" pull api worker
+
+      - name: Levantar la versión nueva
+        run: docker compose --project-directory "$DEPLOY_DIR" up -d
+
+      - name: Verificar que la API quedó lista
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:8080/ready; then
+              echo; echo "API lista"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::La API no quedó lista en 60 segundos"
+          docker compose --project-directory "$DEPLOY_DIR" logs --tail 50
+          exit 1
+
+      - name: Rollback si algo falló
+        if: failure()
+        run: |
+          echo "::error::Despliegue fallido, volviendo a $PREV_TAG"
+          sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${PREV_TAG}/" "$DEPLOY_DIR/.env"
+          docker compose --project-directory "$DEPLOY_DIR" up -d
+
+      - name: Registrar el despliegue en el tracker
+        if: always()
+        run: |
+          STATUS=success
+          [ "${{ job.status }}" = "success" ] || STATUS=failed
+          TOKEN=$(grep '^API_TOKEN=' "$DEPLOY_DIR/.env" | cut -d= -f2)
+          echo "::add-mask::$TOKEN"
+          COMMIT_AT=$(git log -1 --format=%cI)
+          curl -fsS -X POST localhost:8080/deployments \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"service\":\"dora-tracker\",\"version\":\"$GITHUB_SHA\",\"commit_sha\":\"$GITHUB_SHA\",\"commit_at\":\"$COMMIT_AT\",\"status\":\"$STATUS\"}" \
+            || echo "::warning::No se pudo registrar el despliegue en el tracker"
+  
