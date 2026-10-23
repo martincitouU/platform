@@ -1,0 +1,99 @@
+- name: Configuración base de la VM de platform
+  hosts: platform-vm
+  become: true            
+
+  vars:
+    admin_user: martin
+    admin_pubkey_path: ~/.ssh/platform-tf.pub   
+    runner_user: runner
+    deploy_dir: /opt/dora
+
+  tasks:
+    # ---------- Sistema ----------
+    - name: Actualizar índice de paquetes y sistema
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600   # no vuelve a descargar el índice si tiene menos de 1 h
+        upgrade: safe
+
+    - name: Paquetes base
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, jq, ufw, python3-debian, acl]
+        state: present
+
+    # ---------- Docker (repositorio oficial) ----------
+    - name: Llave GPG de Docker
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Repositorio de Docker
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/ubuntu
+        suites: "{{ ansible_facts['distribution_release'] }}"   # "noble"
+        components: stable
+        architectures: amd64
+        signed_by: /etc/apt/keyrings/docker.asc
+
+    - name: Docker Engine y plugin de Compose
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Docker encendido y activo al arrancar
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    # ---------- Usuarios ----------
+    - name: Usuario administrador
+      ansible.builtin.user:
+        name: "{{ admin_user }}"
+        groups: [sudo, docker]
+        append: true
+        shell: /bin/bash
+
+    - name: Llave SSH del administrador
+      ansible.posix.authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ lookup('ansible.builtin.file', admin_pubkey_path | expanduser) }}"
+        exclusive: true          # solo esta llave; borra cualquier otra
+
+    - name: sudo sin contraseña para el administrador
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/90-{{ admin_user }}"
+        content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: visudo -cf %s  # si el archivo tiene errores, no lo instala
+
+    - name: Usuario del runner (sin sudo, con acceso a Docker)
+      ansible.builtin.user:
+        name: "{{ runner_user }}"
+        groups: [docker]
+        append: true
+        shell: /bin/bash
+
+    - name: Carpeta de despliegue
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0750"
+
+    # ---------- Firewall ----------
+    - name: ufw permite SSH (con límite de intentos)
+      community.general.ufw:
+        rule: limit
+        name: OpenSSH
+
+    - name: ufw rechaza el resto de la entrada y se activa
+      community.general.ufw:
+        state: enabled
+        direction: incoming
+        policy: deny
