@@ -1,5 +1,5 @@
 # ---------- Etapa 1: compilación ----------
-FROM golang:1.26 AS build
+FROM golang:1.27 AS build
 WORKDIR /src
 
 # Primero solo los archivos de dependencias (ver "caché" abajo)
