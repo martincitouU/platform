@@ -15,11 +15,25 @@ resource "aws_vpc_security_group_ingress_rule" "ssh" {
   to_port           = 22
 }
 
-resource "aws_vpc_security_group_egress_rule" "all" {
+locals {
+  egress_ports = {
+    https = 443 # GitHub (runner), GHCR, repositorio de Docker, apt
+    http  = 80  # espejos de apt de Ubuntu en EC2
+  }
+}
+
+# Riesgo aceptado: la VM debe alcanzar servicios con IPs cambiantes (GitHub, GHCR, apt),
+# así que el destino no se puede acotar a rangos fijos. Se limita a TCP 80 y 443.
+#trivy:ignore:AWS-0104
+resource "aws_vpc_security_group_egress_rule" "web" {
+  for_each = local.egress_ports
+
   security_group_id = aws_security_group.ssh.id
-  description       = "Salida libre: apt, docker pull, runner de GitHub"
+  description       = "Salida ${each.key}"
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1" # todos los protocolos
+  ip_protocol       = "tcp"
+  from_port         = each.value
+  to_port           = each.value
 }
 
 resource "aws_key_pair" "main" {
