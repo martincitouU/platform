@@ -1,0 +1,47 @@
+# Configuración base común a todas las VMs: sistema, administrador y firewall.
+# Se usa desde site.yml y k3s.yml con import_tasks.
+
+# ---------- Sistema ----------
+- name: Actualizar índice de paquetes y sistema
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600   # no vuelve a descargar el índice si tiene menos de 1 h
+    upgrade: safe
+
+- name: Paquetes base
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, jq, ufw, python3-debian, acl]
+    state: present
+
+# ---------- Administrador ----------
+- name: Usuario administrador
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: [sudo]
+    append: true             # no quita otros grupos (por ejemplo docker)
+    shell: /bin/bash
+
+- name: Llave SSH del administrador
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    key: "{{ lookup('ansible.builtin.file', admin_pubkey_path | expanduser) }}"
+    exclusive: true          # solo esta llave; borra cualquier otra
+
+- name: sudo sin contraseña para el administrador
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ admin_user }}"
+    content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s  # si el archivo tiene errores, no lo instala
+
+# ---------- Firewall ----------
+- name: ufw permite SSH (con límite de intentos)
+  community.general.ufw:
+    rule: limit
+    name: OpenSSH
+
+- name: ufw rechaza el resto de la entrada y se activa
+  community.general.ufw:
+    state: enabled
+    direction: incoming
+    policy: deny

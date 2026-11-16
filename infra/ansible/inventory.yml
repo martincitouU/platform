@@ -1,6 +1,9 @@
 all:
+  vars:
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: ~/.ssh/platform-tf
   hosts:
     platform-vm:
       ansible_host: "{{ lookup('env', 'VM_IP') }}"
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: ~/.ssh/platform-tf
+    platform-k3s:
+      ansible_host: "{{ lookup('env', 'K3S_IP') }}"

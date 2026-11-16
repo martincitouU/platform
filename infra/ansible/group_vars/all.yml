@@ -1,0 +1,3 @@
+# Variables comunes a todas las máquinas del inventario (Ansible carga este archivo solo)
+admin_user: martin
+admin_pubkey_path: ~/.ssh/platform-tf.pub

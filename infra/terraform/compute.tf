@@ -83,3 +83,38 @@ resource "aws_eip" "vm" {
 
   tags = { Name = "platform-vm-02-eip" }
 }
+
+# ---------- Nodo k3s (fase 3) ----------
+resource "aws_instance" "k3s" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.k3s_instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.ssh.id]
+  key_name               = aws_key_pair.main.key_name
+
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1 # los pods no alcanzan los metadatos (ni sus credenciales)
+  }
+
+  root_block_device {
+    volume_size = 30 # imágenes de contenedores y, más adelante, datos de Prometheus
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
+  tags = { Name = "platform-k3s-01" }
+}
+
+resource "aws_eip" "k3s" {
+  domain   = "vpc"
+  instance = aws_instance.k3s.id
+
+  depends_on = [aws_internet_gateway.main]
+
+  tags = { Name = "platform-k3s-01-eip" }
+}
