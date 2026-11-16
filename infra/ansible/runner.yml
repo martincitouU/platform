@@ -1,0 +1,95 @@
+- name: Runner de GitHub Actions
+  hosts: platform-vm
+  become: true
+
+  vars:
+    runner_user: runner
+    runner_dir: /home/runner/actions-runner
+    runner_version: "2.338.0"
+    runner_sha256: "af4b794c1bc41d73d40535e3fe092a39f9679cd8d965954c2aca25a05ca41d32"
+    runner_repo: https://github.com/martincitouU/platform
+    runner_name: platform-vm-02
+    runner_labels: prod
+    runner_token: "{{ lookup('env', 'RUNNER_TOKEN') }}"
+
+  tasks:
+    - name: Carpeta del runner
+      ansible.builtin.file:
+        path: "{{ runner_dir }}"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0750"
+
+    - name: Descargar el runner (verificando el checksum)
+      ansible.builtin.get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+        dest: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+        checksum: "sha256:{{ runner_sha256 }}"
+        mode: "0644"
+
+    - name: Descomprimir
+      ansible.builtin.unarchive:
+        src: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+        dest: "{{ runner_dir }}"
+        remote_src: true
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        creates: "{{ runner_dir }}/config.sh"
+
+    - name: Dependencias del runner
+      ansible.builtin.command: "{{ runner_dir }}/bin/installdependencies.sh"
+      args:
+        creates: "{{ runner_dir }}/.runner"
+
+    - name: ¿Ya está registrado?
+      ansible.builtin.stat:
+        path: "{{ runner_dir }}/.runner"
+      register: runner_cfg
+
+    - name: Verificar que hay token antes de registrar
+      ansible.builtin.assert:
+        that: runner_token | length > 0
+        fail_msg: "Falta RUNNER_TOKEN en el entorno"
+      when: not runner_cfg.stat.exists
+
+    - name: Registrar el runner en GitHub
+      ansible.builtin.command:
+        argv:
+          - ./config.sh
+          - --unattended
+          - --url
+          - "{{ runner_repo }}"
+          - --token
+          - "{{ runner_token }}"
+          - --name
+          - "{{ runner_name }}"
+          - --labels
+          - "{{ runner_labels }}"
+        chdir: "{{ runner_dir }}"
+        creates: "{{ runner_dir }}/.runner"
+      become_user: "{{ runner_user }}"
+      no_log: true            # oculta el comando (con el token) en la pantalla
+      register: runner_reg    # ...pero guarda el resultado en una variable
+      ignore_errors: true     # no se detiene aquí; decidimos abajo
+
+    - name: Mensaje de config.sh (no incluye el token)
+      ansible.builtin.debug:
+        msg: "{{ runner_reg.stdout_lines + runner_reg.stderr_lines }}"
+      when: runner_reg is changed and runner_reg.rc != 0
+
+    - name: Detener si el registro falló
+      ansible.builtin.fail:
+        msg: "config.sh falló: revisa el mensaje de la tarea anterior"
+      when: runner_reg is changed and runner_reg.rc != 0
+    - name: Instalar el runner como servicio de systemd
+      ansible.builtin.command: "./svc.sh install {{ runner_user }}"
+      args:
+        chdir: "{{ runner_dir }}"
+        creates: "{{ runner_dir }}/.service"
+
+    - name: Servicio encendido y activo al arrancar
+      ansible.builtin.systemd:
+        name: "actions.runner.martincitouU-platform.{{ runner_name }}.service"
+        state: started
+        enabled: true
