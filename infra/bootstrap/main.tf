@@ -27,6 +27,11 @@ resource "aws_s3_bucket_versioning" "tfstate" {
   versioning_configuration { status = "Enabled" }
 }
 
+# Riesgo aceptado: SSE-S3 (AES256) cifra el state en reposo con llaves administradas por AWS.
+# Una llave KMS propia (CMK) agregaría rotación y auditoría por llave, pero cuesta ~USD 1/mes
+# más llamadas a KMS; en un proyecto de una persona el control de acceso lo dan IAM y la
+# política del bucket (solo HTTPS, sin acceso público). Revisar si el bucket se comparte.
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
   rule {
