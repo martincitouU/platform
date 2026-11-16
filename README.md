@@ -215,7 +215,10 @@ Correr Ansible una segunda vez da `changed=0`: la VM ya está como describe el c
 | | Lead time |
 |---|---|
 | Despliegue manual (línea base) | **28 min** |
-<!-- | Pipeline automatizado | completar con el lead time medido | -->
+| Pipeline automatizado (merge → producción) | **~1 min 20 s** (entre 1:07 y 1:31 en los últimos despliegues) |
+
+Una reducción de alrededor del **95 %**, medida por el propio DORA Tracker: el pipeline
+registra cada despliegue con la fecha del commit y la del despliegue.
 
 ---
 
