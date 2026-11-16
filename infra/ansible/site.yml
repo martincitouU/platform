@@ -1,25 +1,14 @@
-- name: Configuración base de la VM de platform
+- name: VM de Compose (producción actual)
   hosts: platform-vm
-  become: true            
+  become: true
 
   vars:
-    admin_user: martin
-    admin_pubkey_path: ~/.ssh/platform-tf.pub   
     runner_user: runner
     deploy_dir: /opt/dora
 
   tasks:
-    # ---------- Sistema ----------
-    - name: Actualizar índice de paquetes y sistema
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600   # no vuelve a descargar el índice si tiene menos de 1 h
-        upgrade: safe
-
-    - name: Paquetes base
-      ansible.builtin.apt:
-        name: [ca-certificates, curl, jq, ufw, python3-debian, acl]
-        state: present
+    - name: Configuración base común
+      ansible.builtin.import_tasks: tasks/base.yml
 
     # ---------- Docker (repositorio oficial) ----------
     - name: Llave GPG de Docker
@@ -51,25 +40,11 @@
         enabled: true
 
     # ---------- Usuarios ----------
-    - name: Usuario administrador
+    - name: Administrador en el grupo docker
       ansible.builtin.user:
         name: "{{ admin_user }}"
-        groups: [sudo, docker]
+        groups: [docker]
         append: true
-        shell: /bin/bash
-
-    - name: Llave SSH del administrador
-      ansible.posix.authorized_key:
-        user: "{{ admin_user }}"
-        key: "{{ lookup('ansible.builtin.file', admin_pubkey_path | expanduser) }}"
-        exclusive: true          # solo esta llave; borra cualquier otra
-
-    - name: sudo sin contraseña para el administrador
-      ansible.builtin.copy:
-        dest: "/etc/sudoers.d/90-{{ admin_user }}"
-        content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
-        mode: "0440"
-        validate: visudo -cf %s  # si el archivo tiene errores, no lo instala
 
     - name: Usuario del runner (sin sudo, con acceso a Docker)
       ansible.builtin.user:
@@ -85,15 +60,3 @@
         owner: "{{ runner_user }}"
         group: "{{ runner_user }}"
         mode: "0750"
-
-    # ---------- Firewall ----------
-    - name: ufw permite SSH (con límite de intentos)
-      community.general.ufw:
-        rule: limit
-        name: OpenSSH
-
-    - name: ufw rechaza el resto de la entrada y se activa
-      community.general.ufw:
-        state: enabled
-        direction: incoming
-        policy: deny

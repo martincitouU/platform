@@ -1,0 +1,73 @@
+- name: Nodo k3s
+  hosts: platform-k3s
+  become: true
+
+  vars:
+    k3s_version: "v1.36.6+k3s1"
+    k3s_node_name: platform-k3s-01
+    kubeconfig_local: "{{ lookup('env', 'HOME') }}/.kube/platform-k3s.yaml"
+
+  tasks:
+    - name: Configuración base común
+      ansible.builtin.import_tasks: tasks/base.yml
+
+    # Los pods (10.42.0.0/16) y los services (10.43.0.0/16) hablan con el host,
+    # por ejemplo con el DNS del cluster y la API de Kubernetes.
+    - name: ufw permite el tráfico interno del cluster
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ item }}"
+      loop: [10.42.0.0/16, 10.43.0.0/16]
+
+    - name: Carpeta de configuración de k3s
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Configuración de k3s
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          node-name: {{ k3s_node_name }}
+          write-kubeconfig-mode: "0600"
+          secrets-encryption: true
+
+    - name: Script de instalación, fijado a la misma versión
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version | replace('+', '%2B') }}/install.sh"
+        dest: /usr/local/src/k3s-install.sh
+        mode: "0755"
+
+    # El script descarga el binario de esa versión y verifica su checksum antes de instalarlo
+    - name: Instalar k3s
+      ansible.builtin.command: /usr/local/src/k3s-install.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: k3s encendido y activo al arrancar
+      ansible.builtin.systemd:
+        name: k3s
+        state: started
+        enabled: true
+
+    - name: Esperar a que el nodo esté Ready
+      ansible.builtin.command: "k3s kubectl wait --for=condition=Ready node/{{ k3s_node_name }} --timeout=180s"
+      changed_when: false
+
+    # El kubeconfig es una credencial de administrador del cluster: solo para tu usuario
+    - name: Traer el kubeconfig a tu Mac
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ kubeconfig_local }}"
+        flat: true
+
+    - name: Permisos del kubeconfig local
+      ansible.builtin.file:
+        path: "{{ kubeconfig_local }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false

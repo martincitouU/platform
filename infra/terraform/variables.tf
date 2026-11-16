@@ -38,3 +38,9 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+variable "k3s_instance_type" {
+  description = "Tamaño del nodo k3s (k3s + Argo CD + observabilidad necesitan ~4 GB)"
+  type        = string
+  default     = "c7i-flex.large" # 2 vCPU, 4 GB; elegible en el plan Free
+}
