@@ -1,0 +1,10 @@
+# Todo lo de la app vive en su propio namespace.
+# Pod Security Admission "restricted": el cluster rechaza cualquier pod que corra como
+# root, pueda escalar privilegios o no tenga perfil seccomp.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dora
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted

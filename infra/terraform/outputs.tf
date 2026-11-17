@@ -29,3 +29,8 @@ output "k3s_tunnel_command" {
   description = "Túnel para usar kubectl desde tu Mac sin exponer la API del cluster"
   value       = "ssh -i ~/.ssh/platform-tf -N -L 6443:127.0.0.1:6443 ubuntu@${aws_eip.k3s.public_ip}"
 }
+
+output "k3s_instance_id" {
+  description = "Para encender o detener el nodo: aws ec2 start-instances / stop-instances"
+  value       = aws_instance.k3s.id
+}
