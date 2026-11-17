@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: dora
+spec:
+  replicas: 1      # la API aplica migraciones al arrancar: una sola réplica por ahora
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532         # usuario "nonroot" de la imagen distroless
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ghcr.io/martincitouu/dora-api:feb984beb3e0e1f03b53e275c94b79d7f6ee00d7
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dora-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL     # $(VAR) usa una variable definida más arriba
+              value: postgres://dora:$(POSTGRES_PASSWORD)@db:5432/dora?sslmode=disable
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dora-secrets
+                  key: API_TOKEN
+          ports:
+            - name: http
+              containerPort: 8080
+          # liveness: ¿el proceso vive? Si falla, Kubernetes reinicia el contenedor.
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          # readiness: ¿puede atender? Si falla, el Service deja de mandarle tráfico.
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: dora
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

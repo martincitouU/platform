@@ -1,0 +1,94 @@
+# PostgreSQL como StatefulSet: identidad estable (db-0) y un volumen propio que
+# sobrevive aunque el pod se borre o se reprograme.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: dora
+spec:
+  clusterIP: None            # "headless": el nombre db resuelve directo al pod
+  selector:
+    app: db
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: dora
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999           # usuario "postgres" de la imagen oficial
+        runAsGroup: 999
+        fsGroup: 999             # el volumen queda escribible para ese grupo
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_USER
+              value: dora
+            - name: POSTGRES_DB
+              value: dora
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dora-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA       # subcarpeta: initdb exige un directorio vacío
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "dora", "-d", "dora"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "dora", "-d", "dora"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run              # socket de PostgreSQL
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path   # el aprovisionador que trae k3s
+        resources:
+          requests:
+            storage: 5Gi

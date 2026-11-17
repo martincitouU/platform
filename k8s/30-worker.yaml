@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: dora
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ghcr.io/martincitouu/dora-worker:feb984beb3e0e1f03b53e275c94b79d7f6ee00d7
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dora-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgres://dora:$(POSTGRES_PASSWORD)@db:5432/dora?sslmode=disable
+            - name: WORKER_INTERVAL
+              value: 30s
+          ports:
+            - name: metrics
+              containerPort: 9091
+          livenessProbe:
+            httpGet: { path: /health, port: metrics }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+# Lo usará Prometheus en la fase 4 para leer las métricas DORA
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: dora
+spec:
+  selector:
+    app: worker
+  ports:
+    - name: metrics
+      port: 9091
+      targetPort: metrics
